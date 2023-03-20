@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: httpbin
+  labels:
+    name: httpbin
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: httpbin2
+  labels:
+    name: httpbin2
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: salt-sensor
+  labels:
+    name: salt-sensor

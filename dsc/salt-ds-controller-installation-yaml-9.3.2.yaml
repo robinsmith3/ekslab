@@ -1,0 +1,145 @@
+## Salt Security Sensor K8s DaemonSet Controller Deployment 9.3.2.
+## Copyright (C) 2021 Salt Security Inc.
+
+# This manifest is aimed to deploy Salt Security Sensor as a DaemonSet instance, with read access to the node's networking stack and pods list.
+# This manifest includes ${PLACEHOLDERS} used to set up the Salt Sensor with needed configuration. For more information
+# about available configuration please see the Salt Sensor Deployment Guide, and/or contact Salt Security team.
+
+# Please make sure to replace all ${PLACEHOLDERS} with the appropriate values before applying this manifest!!!
+# - SALT_TOKEN: Authentication Token.
+# - SALT_BACKEND_HOST: Salt Security services host
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: salt-sensor-secret
+  namespace: salt-sensor
+type: Opaque
+stringData:
+  token: "NjNhNDI5Nzc2MTI2N2Q2ZGE5NmNiMzk2OmEzcXprNnAxb3dqajc2N2ZsaHp5bG5haHN6NHhnOXJnamZrYzFyaWw3NGZ5NjVzMWdsMDJlMnNxZjltanhhZzA="
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: salt-sensor-cluster-role
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: salt-sensor-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: salt-sensor-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: salt-sensor-service-account
+  namespace: salt-sensor
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: salt-sensor-service-account
+  namespace: salt-sensor
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: salt-sensor
+  namespace: salt-sensor
+  labels:
+    tier: node
+    app: salt-sensor
+spec:
+  selector:
+    matchLabels:
+      app: salt-sensor
+  template:
+    metadata:
+      labels:
+        tier: node
+        app: salt-sensor
+    spec:
+      hostPID: true
+      serviceAccountName: salt-sensor-service-account
+      affinity: # affinity settings if applicable
+      tolerations: # tolerations settings if applicable
+      containers:
+      - name: salt-sensor
+        image: saltsecurity/sensor:9.3.2
+        imagePullPolicy: Always
+        args:
+        - salt-sensor
+        - controller
+        securityContext:
+          capabilities:
+            add: ["SYS_ADMIN", "SYS_PTRACE", "NET_ADMIN"]
+          runAsUser: 0
+        env:
+        - name: SALT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: salt-sensor-secret
+              key: token
+        - name: SALT_BACKEND_HOST
+          value: "52.188.163.124"
+        - name: SALT_PROMISCUOUS_MODE
+          value: "true"
+        - name: SALT_BACKEND_PORT
+          value: "443"
+        - name: SALT_SERVICES_PORTS
+          value: "443"
+        - name: SALT_INGRESS_MODE
+          value: "true"
+        - name: SALT_LABELS
+          value: "robins-daemonset-cntrlr"
+        - name: SALT_DISALLOWED_URLS
+          value: "^/json" 
+        - name: SALT_DISALLOWED_HOSTS
+          value: "hostname.io"
+        - name: SALT_LOGS_LEVEL
+          value: "DEBUG"
+        - name: SALT_VERBOSE
+          value: "true"
+        ## In order to monitor only specific pods, uncomment the following variables and set the value to match
+        ## the relevant namespaces and/or labels (both values support a comma-separated list)
+        - name: MONITORED_NAMESPACES
+          value: "httpbin,httpbin2"
+        #- name: MONITORED_LABELS
+        #  value: "role=system,region=europe"
+        - name: IGNORED_LABELS
+          value: "app=salt-sensor"
+        volumeMounts:
+          - name: "dockershimsock"
+            mountPath: "/var/run/dockershim.sock"
+          - name: "containerdsock"
+            mountPath: "/run/containerd/containerd.sock"
+          - name: "dockersock"
+            mountPath: "/var/run/docker.sock"
+      volumes:
+        - name: "dockershimsock"
+          hostPath:
+            path: "/var/run/dockershim.sock"
+        - name: "containerdsock"
+          hostPath:
+            path: "/run/containerd/containerd.sock"
+        - name: "dockersock"
+          hostPath:
+            path: "/var/run/docker.sock"
+      ## In order to provide custom sensor certificate, uncomment the 'volumeMounts' and 'volumes' sections and replace the
+      ## ${CERT_FILE_FULL_PATH} placeholder with the certificate's full path.
+      #
+      #  volumeMounts:
+      #  - name: "custom-cert-volume"
+      #    mountPath: "/etc/salt-security/certs/custom_cert.crt"
+      #    subPath: "custom_cert.crt"
+      #    readOnly: true
+      #volumes:
+      #- name: custom-cert-volume
+      #  hostPath:
+      #    path: ${CERT_FILE_FULL_PATH}

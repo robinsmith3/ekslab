@@ -1,0 +1,131 @@
+## Salt Security Sensor K8s DaemonSet Deployment 9.3.2.
+## Copyright (C) 2021 Salt Security Inc.
+
+# This manifest is aimed to deploy Salt Security Sensor as a DaemonSet instance, with read access to the node's networking stack.
+# This manifest includes ${PLACEHOLDERS} used to set up the Salt Sensor with needed configuration. For more information
+# about available configuration please see the Salt Sensor Deployment Guide, and/or contact Salt Security team.
+
+# Please make sure to replace all ${PLACEHOLDERS} with the appropriate values before applying this manifest!!!
+# - SALT_TOKEN: Authentication Token.
+# - SALT_BACKEND_HOST: Salt Security services host
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: salt-sensor-secret
+type: Opaque
+stringData:
+  token: "NjNhNDI5Nzc2MTI2N2Q2ZGE5NmNiMzk2OmEzcXprNnAxb3dqajc2N2ZsaHp5bG5haHN6NHhnOXJnamZrYzFyaWw3NGZ5NjVzMWdsMDJlMnNxZjltanhhZzA="
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: salt-sensor-security-policy
+spec:
+  runAsUser:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  allowedCapabilities: ['NET_ADMIN', 'NET_RAW']
+  hostNetwork: true
+  seLinux:
+    rule: 'RunAsAny'
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: salt-sensor-cluster-role
+rules:
+  - apiGroups: ['extensions']
+    resources: ['podsecuritypolicies']
+    verbs: ['use']
+    resourceNames: ['salt-sensor-security-policy']
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: salt-sensor-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: salt-sensor-cluster-role
+subjects:
+  - kind: ServiceAccount
+    name: salt-sensor-service-account
+    namespace: kube-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: salt-sensor-service-account
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: salt-sensor
+  labels:
+    tier: node
+    app: salt-sensor
+spec:
+  selector:
+    matchLabels:
+      app: salt-sensor
+  template:
+    metadata:
+      labels:
+        tier: node
+        app: salt-sensor
+    spec:
+      hostNetwork: true
+      serviceAccountName: salt-sensor-service-account
+      affinity: # affinity settings if applicable
+      tolerations: # tolerations settings if applicable
+      containers:
+        - name: salt-sensor
+          image: saltsecurity/sensor:9.3.2
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ['NET_ADMIN', 'NET_RAW']
+          env:
+            - name: SALT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: salt-sensor-secret
+                  key: token
+            - name: SALT_BACKEND_HOST
+              value: "52.188.163.124"
+            - name: SALT_PROMISCUOUS_MODE
+              value: "true"
+            - name: SALT_BACKEND_PORT
+              value: "443"
+            - name: SALT_SERVICES_PORTS
+              value: "443"
+            - name: SALT_INGRESS_MODE
+              value: "true"
+            - name: SALT_LABELS
+              value: "robins-daemonset"
+            - name: SALT_DISALLOWED_URLS
+              value: "^/json" 
+            - name: SALT_DISALLOWED_HOSTS
+              value: "hostname.io"
+            - name: SALT_LOGS_LEVEL
+              value: "DEBUG"
+            - name: SALT_VERBOSE
+              value: "true"
+      ## In order to provide custom sensor certificate, uncomment the 'volumeMounts' and 'volumes' sections and replace the
+      ## ${CERT_FILE_FULL_PATH} placeholder with the certificate's full path.
+      #
+      # volumeMounts:
+      #   - name: "custom-cert-volume"
+      #     mountPath: "/etc/salt-security/certs/custom_cert.crt"
+      #     subPath: "custom_cert.crt"
+      #     readOnly: true
+      # volumes:
+      #   - name: custom-cert-volume
+      #     hostPath:
+      #       path: ${CERT_FILE_FULL_PATH}

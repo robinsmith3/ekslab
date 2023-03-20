@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin2
+  namespace: httpbin2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: httpbin
+  template:
+    metadata:
+      labels:
+        app: httpbin
+    spec:
+      containers:
+        - image: docker.io/kennethreitz/httpbin
+          imagePullPolicy: IfNotPresent
+          name: httpbin
+          ports:
+        - name: salt-sensor
+          image: saltsecurity/sensor:9.3.2
+          imagePullPolicy: Always
+          securityContext:
+            capabilities:
+              add: ["NET_RAW", "NET_ADMIN"]
+          env:
+            - name: SALT_TOKEN
+              value: "NjNhNDI5Nzc2MTI2N2Q2ZGE5NmNiMzk2OmEzcXprNnAxb3dqajc2N2ZsaHp5bG5haHN6NHhnOXJnamZrYzFyaWw3NGZ5NjVzMWdsMDJlMnNxZjltanhhZzA="
+            - name: SALT_BACKEND_HOST
+              value: "52.188.163.124"
+            - name: SALT_BACKEND_PORT
+              value: "443"
+            - name: SALT_SERVICES_PORTS
+              value: "443"
+            - name: SALT_INGRESS_MODE
+              value: "true"
+            - name: SALT_LABELS
+              value: "robins-sidecar2"
+ #           - name: SALT_PROMISCUOUS_MODE
+ #             value: "true"
